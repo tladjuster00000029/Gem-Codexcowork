@@ -1,0 +1,120 @@
+name: Gemini + Codex cowork
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 구현할 기능 또는 수정할 문제를 구체적으로 입력하세요
+        type: string
+        required: true
+      gemini_model:
+        description: 계정에서 사용 가능한 Gemini 모델 ID
+        type: string
+        required: true
+      codex_model:
+        description: 계정에서 사용 가능한 Codex 모델 ID
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: cowork-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  collaborate:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TASK: ${{ inputs.task }}
+      GEMINI_MODEL: ${{ inputs.gemini_model }}
+      CODEX_MODEL: ${{ inputs.codex_model }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Validate configuration
+        env:
+          OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          test -n "$OPENAI_KEY" || { echo 'Add OPENAI_API_KEY to repository secrets'; exit 1; }
+          test -n "$GEMINI_KEY" || { echo 'Add GEMINI_API_KEY to repository secrets'; exit 1; }
+      - run: npm test
+      - name: Gemini planning
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: node scripts/cowork.mjs plan
+      - uses: ./.github/actions/round
+        id: first
+        with:
+          openai-key: ${{ secrets.OPENAI_API_KEY }}
+          gemini-key: ${{ secrets.GEMINI_API_KEY }}
+          round: '1'
+      - uses: ./.github/actions/round
+        id: second
+        if: steps.first.outputs.approved != 'true'
+        with:
+          openai-key: ${{ secrets.OPENAI_API_KEY }}
+          gemini-key: ${{ secrets.GEMINI_API_KEY }}
+          round: '2'
+      - uses: ./.github/actions/round
+        if: steps.first.outputs.approved != 'true' && steps.second.outputs.approved != 'true'
+        with:
+          openai-key: ${{ secrets.OPENAI_API_KEY }}
+          gemini-key: ${{ secrets.GEMINI_API_KEY }}
+          round: '3'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cowork-result
+          path: |
+            ${{ runner.temp }}/cowork.patch
+            ${{ runner.temp }}/pr-body.md
+            ${{ runner.temp }}/cowork-report.md
+          if-no-files-found: error
+  propose:
+    needs: collaborate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: cowork-result
+          path: ${{ runner.temp }}/result
+      - name: Open draft PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          patch="$RUNNER_TEMP/result/cowork.patch"
+          if [ ! -s "$patch" ]; then
+            echo 'No code changes. See cowork-result artifact.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git apply --check "$patch"
+          git apply "$patch"
+          git add -N .
+          if git diff --name-only | grep -E '^([.]github/|approval/|open-approval[.]cmd$|[.]gitignore$|package[.]json$|AGENTS[.]md$|scripts/cowork.*[.]mjs$)'; then
+            echo 'Refusing changes to automation control files'
+            exit 1
+          fi
+          branch="cowork/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          git switch -c "$branch"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .
+          git commit -m 'Implement Gemini–Codex collaboration task'
+          gh auth setup-git
+          git push origin "$branch"
+          gh pr create --draft --head "$branch" --title 'Gemini + Codex: proposed changes' --body-file "$RUNNER_TEMP/result/pr-body.md" >> "$GITHUB_STEP_SUMMARY"
+          gh workflow run test.yml --ref "$branch"
