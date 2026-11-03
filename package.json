@@ -1,0 +1,6 @@
+{
+  "name": "gem-codex-cowork",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test", "approve": "node approval/server.mjs" }
+}
