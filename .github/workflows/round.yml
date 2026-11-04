@@ -1,0 +1,111 @@
+name: Isolated implementation and review
+on:
+  workflow_call:
+    inputs:
+      task:
+        type: string
+        required: true
+      gemini_model:
+        type: string
+        required: true
+      codex_model:
+        type: string
+        required: true
+      round:
+        type: string
+        required: true
+      input_artifact:
+        type: string
+        required: true
+    secrets:
+      OPENAI_API_KEY:
+        required: true
+      GEMINI_API_KEY:
+        required: true
+    outputs:
+      approved:
+        value: ${{ jobs.review.outputs.approved }}
+      artifact:
+        value: ${{ jobs.review.outputs.artifact }}
+permissions:
+  contents: read
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      payload: ${{ steps.codex.outputs.final-message }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.input_artifact }}
+          path: ${{ runner.temp }}/state
+      - name: Restore validated changes and prepare prompt
+        env:
+          RUNNER_TEMP: ${{ runner.temp }}/state
+          TASK: ${{ inputs.task }}
+        run: node scripts/cowork.mjs prepare
+      # Last step: no further code, secret, or publishing step shares this runner.
+      - name: Codex implementation
+        id: codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          model: ${{ inputs.codex_model }}
+          prompt-file: ${{ runner.temp }}/state/cowork-prompt.md
+          sandbox: workspace-write
+          safety-strategy: drop-sudo
+          codex-args: '["--ephemeral", "--output-schema", "${{ runner.temp }}/state/codex-schema.json"]'
+  review:
+    needs: implement
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    outputs:
+      approved: ${{ steps.review.outputs.approved }}
+      artifact: cowork-round-${{ inputs.round }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.input_artifact }}
+          path: ${{ runner.temp }}/state
+      - name: Gemini review in a clean environment
+        id: review
+        env:
+          RUNNER_TEMP: ${{ runner.temp }}/state
+          COWORK_DIAGNOSTIC_FILE: ${{ runner.temp }}/api-diagnostic.jsonl
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ inputs.gemini_model }}
+          TASK: ${{ inputs.task }}
+          ROUND: ${{ inputs.round }}
+          CODEX_PAYLOAD: ${{ needs.implement.outputs.payload }}
+        run: node scripts/cowork.mjs review
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cowork-round-${{ inputs.round }}
+          path: |
+            ${{ runner.temp }}/state/cowork.patch
+            ${{ runner.temp }}/state/cowork-prompt.md
+            ${{ runner.temp }}/state/cowork-report.md
+            ${{ runner.temp }}/state/pr-body.md
+          if-no-files-found: error
+      - name: Retain sanitized API diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-diagnostic-round-${{ inputs.round }}
+          path: ${{ runner.temp }}/api-diagnostic.jsonl
+          if-no-files-found: ignore

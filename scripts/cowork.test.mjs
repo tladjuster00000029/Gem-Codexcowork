@@ -20,6 +20,7 @@ test('plan and review preserve new-file changes and write approval output', () =
   const git = (...args) => execFileSync('git', args, { cwd: repo, stdio: 'pipe' });
   try {
     git('init');
+    git('config', 'core.autocrlf', 'false');
     writeFileSync(join(repo, 'README.md'), 'Fixture project');
     git('add', '.');
     git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-m', 'fixture');
@@ -33,12 +34,27 @@ test('plan and review preserve new-file changes and write approval output', () =
     run('plan', 'Add greeting.txt and verify contents.');
     assert.match(readFileSync(join(temp, 'cowork-prompt.md'), 'utf8'), /Add a greeting/);
     writeFileSync(join(repo, 'greeting.txt'), 'hello\n');
-    writeFileSync(join(temp, 'codex-result.md'), 'Verified greeting.txt contents.');
+    git('add', '-N', '.');
+    const patch = git('diff', '--binary', 'HEAD').toString();
+    writeFileSync(join(temp, 'codex-result.json'), JSON.stringify({ patch, report: 'Verified greeting.txt contents.' }));
+    // The review runner has a clean base; generated code is never applied there.
+    rmSync(join(repo, 'greeting.txt'));
+    git('reset');
     run('review', JSON.stringify({ approved: true, summary: 'OK', findings: [] }));
     assert.match(readFileSync(join(temp, 'output'), 'utf8'), /approved=true/);
     assert.match(readFileSync(join(temp, 'cowork.patch'), 'utf8'), /greeting.txt/);
     assert.match(readFileSync(join(temp, 'pr-body.md'), 'utf8'), /human review required/);
+    assert.throws(() => readFileSync(join(repo, 'greeting.txt')));
+    // Prepare the next implementation runner from the reviewed cumulative patch.
+    run('prepare', 'not called');
+    assert.equal(readFileSync(join(repo, 'greeting.txt'), 'utf8'), 'hello\n');
+    rmSync(join(repo, 'greeting.txt'));
+    git('reset');
     writeFileSync(join(repo, 'AGENTS.md'), 'unauthorized change');
+    git('add', '-N', '.');
+    writeFileSync(join(temp, 'codex-result.json'), JSON.stringify({ patch: git('diff', '--binary', 'HEAD').toString(), report: 'Forbidden' }));
+    rmSync(join(repo, 'AGENTS.md'));
+    git('reset');
     assert.throws(() => run('review', JSON.stringify({ approved: true, summary: 'OK', findings: [] })));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
