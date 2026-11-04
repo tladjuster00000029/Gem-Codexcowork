@@ -20,14 +20,13 @@ concurrency:
   group: cowork-${{ github.ref }}
   cancel-in-progress: false
 jobs:
-  collaborate:
+  plan:
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 12
     env:
       TASK: ${{ inputs.task }}
       GEMINI_MODEL: ${{ inputs.gemini_model }}
-      CODEX_MODEL: ${{ inputs.codex_model }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,36 +45,68 @@ jobs:
       - name: Gemini planning
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          COWORK_DIAGNOSTIC_FILE: ${{ runner.temp }}/api-diagnostic.jsonl
         run: node scripts/cowork.mjs plan
-      - uses: ./.github/actions/round
-        id: first
-        with:
-          openai-key: ${{ secrets.OPENAI_API_KEY }}
-          gemini-key: ${{ secrets.GEMINI_API_KEY }}
-          round: '1'
-      - uses: ./.github/actions/round
-        id: second
-        if: steps.first.outputs.approved != 'true'
-        with:
-          openai-key: ${{ secrets.OPENAI_API_KEY }}
-          gemini-key: ${{ secrets.GEMINI_API_KEY }}
-          round: '2'
-      - uses: ./.github/actions/round
-        if: steps.first.outputs.approved != 'true' && steps.second.outputs.approved != 'true'
-        with:
-          openai-key: ${{ secrets.OPENAI_API_KEY }}
-          gemini-key: ${{ secrets.GEMINI_API_KEY }}
-          round: '3'
       - uses: actions/upload-artifact@v4
         with:
-          name: cowork-result
+          name: cowork-plan
           path: |
             ${{ runner.temp }}/cowork.patch
-            ${{ runner.temp }}/pr-body.md
+            ${{ runner.temp }}/cowork-prompt.md
             ${{ runner.temp }}/cowork-report.md
           if-no-files-found: error
+      - name: Retain sanitized API diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-diagnostic-plan
+          path: ${{ runner.temp }}/api-diagnostic.jsonl
+          if-no-files-found: ignore
+  first:
+    needs: plan
+    uses: ./.github/workflows/round.yml
+    with:
+      task: ${{ inputs.task }}
+      gemini_model: ${{ inputs.gemini_model }}
+      codex_model: ${{ inputs.codex_model }}
+      round: '1'
+      input_artifact: cowork-plan
+    secrets:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+  second:
+    needs: first
+    if: needs.first.outputs.approved != 'true'
+    uses: ./.github/workflows/round.yml
+    with:
+      task: ${{ inputs.task }}
+      gemini_model: ${{ inputs.gemini_model }}
+      codex_model: ${{ inputs.codex_model }}
+      round: '2'
+      input_artifact: ${{ needs.first.outputs.artifact }}
+    secrets:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+  third:
+    needs: [first, second]
+    if: needs.first.outputs.approved != 'true' && needs.second.outputs.approved != 'true'
+    uses: ./.github/workflows/round.yml
+    with:
+      task: ${{ inputs.task }}
+      gemini_model: ${{ inputs.gemini_model }}
+      codex_model: ${{ inputs.codex_model }}
+      round: '3'
+      input_artifact: ${{ needs.second.outputs.artifact }}
+    secrets:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
   propose:
-    needs: collaborate
+    needs: [first, second, third]
+    if: >-
+      always() && !cancelled() &&
+      ((needs.first.result == 'success' && needs.first.outputs.approved == 'true') ||
+       (needs.second.result == 'success' && needs.second.outputs.approved == 'true') ||
+       needs.third.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -85,11 +116,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - uses: actions/download-artifact@v4
         with:
-          name: cowork-result
+          name: ${{ needs.third.outputs.artifact || needs.second.outputs.artifact || needs.first.outputs.artifact }}
           path: ${{ runner.temp }}/result
+      - name: Validate patch with trusted control code
+        run: |
+          node --input-type=module -e 'import {readFileSync} from "node:fs"; import {validatePatch} from "./scripts/cowork-patch.mjs"; validatePatch(readFileSync(process.env.RUNNER_TEMP + "/result/cowork.patch", "utf8"));'
       - name: Open draft PR
         env:
           GH_TOKEN: ${{ github.token }}
@@ -98,7 +136,7 @@ jobs:
           set -euo pipefail
           patch="$RUNNER_TEMP/result/cowork.patch"
           if [ ! -s "$patch" ]; then
-            echo 'No code changes. See cowork-result artifact.' >> "$GITHUB_STEP_SUMMARY"
+            echo 'No code changes. See cowork-round artifact.' >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           git apply --check "$patch"
