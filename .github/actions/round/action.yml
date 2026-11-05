@@ -1,32 +1,9 @@
-name: Implement and review
-description: Codex implementation followed by an independent Gemini review
-inputs:
-  openai-key:
-    required: true
-    description: OpenAI API key
-  gemini-key:
-    required: true
-    description: Gemini API key
-  round:
-    required: true
-    description: Round number
-outputs:
-  approved:
-    description: Whether Gemini approved
-    value: ${{ steps.review.outputs.approved }}
+name: Legacy API execution disabled
+description: Subscription-only local runner replaces this action
 runs:
   using: composite
   steps:
-    - uses: openai/codex-action@v1
-      with:
-        openai-api-key: ${{ inputs.openai-key }}
-        model: ${{ env.CODEX_MODEL }}
-        prompt-file: ${{ runner.temp }}/cowork-prompt.md
-        output-file: ${{ runner.temp }}/codex-result.md
-        sandbox: workspace-write
-    - id: review
-      shell: bash
-      env:
-        GEMINI_API_KEY: ${{ inputs.gemini-key }}
-        ROUND: ${{ inputs.round }}
-      run: node scripts/cowork.mjs review
+    - shell: bash
+      run: |
+        echo 'API-key execution is disabled. Use the local subscription runner.'
+        exit 1

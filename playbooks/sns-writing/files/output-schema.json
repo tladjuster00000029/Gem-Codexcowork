@@ -1,0 +1,19 @@
+{
+  "brunch": "브런치 최종 원고와 고정 안내 및 해시태그 15개",
+  "naver": "블로그 Q1~Q3 원고와 고정 안내 및 가로/세로 해시태그 각 15개",
+  "evidence": "원문과 수치·판례 대조, 본문 압축률, 미확인 항목",
+  "post": {
+    "topic": "주제", "theme_color": "burgundy", "brunch_url": "https://brunch.co.kr/@tl-oooooo/글번호입력",
+    "cards": {
+      "slide1": {"main_title":"제목","sub_title":"부제","left_caption":["요약1","요약2","요약3"]},
+      "slides_2_to_4": [
+        {"title":"제목1","headline":"핵심1","bullets":["설명"],"note":"주석 문자열"},
+        {"title":"제목2","headline":"핵심2","bullets":["설명"],"note":"주석 문자열"},
+        {"title":"제목3","headline":"핵심3","bullets":["설명"],"note":"주석 문자열"}
+      ],
+      "slide5": {"title":"정리","headline":"요약","bullets":["설명"],"green_notes":["고정 안내"]}
+    },
+    "instagram":{"caption":"인스타그램 원고와 해시태그 11~15개"},
+    "threads":{"main_text":"본문","reply_text":"안내와 해시태그 5개"}
+  }
+}
