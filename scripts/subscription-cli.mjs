@@ -33,7 +33,9 @@ export function invoke(executable, args, { cwd, env, input, includeStderr = fals
 export function parseGoogleResponse(raw) {
   const result = JSON.parse(raw);
   if (result.status !== 'SUCCESS' || typeof result.response !== 'string' || !result.response.trim()) {
-    throw new Error('Google 구독 실행이 완료되지 않았습니다. 로그인·사용 한도를 확인하세요.');
+    const status = /^[A-Z_]{1,40}$/.test(result.status || '') ? result.status : 'UNKNOWN';
+    const fields = Object.keys(result).filter(key => /^[a-zA-Z_]{1,40}$/.test(key)).join(',');
+    throw new Error('Google 구독 실행 미완료 (status=' + status + '; fields=' + fields + '; responseType=' + typeof result.response + '; responseLength=' + (typeof result.response === 'string' ? result.response.length : -1) + '; denied=' + (Array.isArray(result.denied_actions) ? result.denied_actions.length : -1) + ').');
   }
   return result.response;
 }
@@ -43,11 +45,13 @@ export function invokeGoogleSubscription(prompt, { executable, workDir, timeoutM
   if (!existsSync(executable)) throw new Error('Google 공식 Antigravity CLI 설치가 필요합니다.');
   const settings = { modelProvider: '', agentMode: 'plan', toolPermission: 'request-review',
     permissions: { deny: ['command(*)', 'write_file(*)', 'mcp(*)'] } };
-  const raw = invoke(executable, ['-p', '표준 입력의 작업을 수행하라.', '--output-format', 'json',
+  const raw = invoke(executable, ['--input-format', 'stream-json', '--output-format', 'stream-json',
     '--mode', 'plan', '--disable-slash-commands', '--print-timeout', `${Math.max(1, Math.floor(timeoutMs / 1000))}s`, '--settings', JSON.stringify(settings)], {
-    cwd: workDir, env: subscriptionEnv(), input: prompt, timeoutMs,
+    cwd: workDir, env: subscriptionEnv(), input: JSON.stringify({ event: 'user', message: { content: prompt } }) + '\n', timeoutMs,
   });
-  return parseGoogleResponse(raw);
+  const results = raw.split(/\r?\n/).filter(line => line.trim()).map(line => JSON.parse(line)).filter(event => event.event === 'result');
+  if (results.length !== 1) throw new Error('Google 작업 결과 이벤트 수가 올바르지 않습니다.');
+  return parseGoogleResponse(JSON.stringify(results[0].result));
 }
 
 export function callSubscription(stage, prompt, { root, workDir, codex = 'codex', googleMode, googleExecutable, reviewInbox, reviewerSid, coordinatorSid } = {}) {
