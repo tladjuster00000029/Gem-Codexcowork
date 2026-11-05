@@ -1,4 +1,4 @@
-param([ValidateSet('a','b','shared')][string]$Account = 'shared')
+﻿param([ValidateSet('a','b','shared')][string]$Account = 'shared')
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path $PSScriptRoot -Parent
 $taskBinary = Join-Path $taskRoot '.local-tools/agy/agy.exe'

@@ -1,4 +1,4 @@
-param([string]$NodePath = (Get-Command node -ErrorAction Stop).Source)
+﻿param([string]$NodePath = (Get-Command node -ErrorAction Stop).Source)
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path $PSScriptRoot -Parent
 $taskScript = Join-Path $PSScriptRoot 'sns-queue.mjs'

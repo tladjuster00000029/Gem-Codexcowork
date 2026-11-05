@@ -5,7 +5,7 @@ GitHub의 업무별 매뉴얼을 기준으로 Google Gemini 모델이 기획하�
 ## 시작
 
 1. 공식 Antigravity CLI를 설치합니다. 현재 PC의 `.local-tools/agy/agy.exe`는 Google 공식 매니페스트 SHA512 검증을 통과한 1.5.1입니다. 설치 안내는 https://antigravity.google/docs/getting-started?tab=cli 입니다.
-2. `scripts/login-gemini.ps1 -Account shared`로 공식 Google 구독 로그인을 진행합니다. 개인 계정의 구형 Gemini CLI 지원은 2026-06-18 종료됐습니다. Antigravity는 공통 OS 인증 저장소를 사용합니다. 계정 운영 방식을 정한 뒤 `.runtime/config.json`의 `googleMode`를 설정합니다. 단일 계정 기획·검토는 `single`이며 사용자 선택 전에는 실행을 차단합니다. 두 계정 독립 실행은 별도 Windows 환경 설계가 필요합니다.
+2. 한 PC에서 두 계정을 사용할 때는 `open-one-pc-setup.cmd`로 공유 설치를 준비한 뒤 Windows 사용자별로 `connect-google.cmd`를 열어 Google 구독을 연결합니다. 현재 사용자는 기획, SNSReview는 검토 역할입니다. 두 Windows 사용자 세션을 로그인 상태로 유지합니다. 실제 계정 분리와 Google 응답은 설치 후 확인해야 합니다. 개인 계정의 구형 Gemini CLI 지원은 2026-06-18 종료됐으며 공식 후속 도구 Antigravity를 사용합니다.
 3. Codex CLI에서 ChatGPT로 로그인합니다. API 키 로그인은 사용하지 않습니다.
 4. `open-sns.cmd`를 열어 도서 원고를 등록하고 결과를 확인합니다.
 5. `scripts/register-sns-task.ps1`을 실행하면 로그인된 이 PC에서 15분마다 대기열을 확인합니다. PC 전원이 켜져 있어야 합니다.
@@ -40,3 +40,24 @@ PC의 UTF-8 텍스트는 `node scripts/sns-queue.mjs add 원고.txt`로 등록�
 # 지침 적용 우선순위
 
 사용자가 제공한 네 레이어 원문은 `playbooks/_agent-builder/`에 보관합니다. 새 업무 매뉴얼은 레이어 1 인터뷰부터 시작하고, 기존 승인 매뉴얼은 해당 파일을 재사용합니다. 이번 SNS 업무는 사용자가 지정한 기존 매뉴얼을 적용했습니다. 이미 허용된 로컬 작업과 GitHub 코드 반영은 반복 승인을 요구하지 않으며 게시·배포·발송의 최종 승인권은 사용자에게 있습니다.
+
+## 한 PC에서 Google 두 계정 실행
+
+`open-one-pc-setup.cmd`는 관리자 설치 창을 열어 검토용 표준 Windows 사용자 `SNSReview`를 준비합니다. 현재 사용자에서 Gemini A 기획과 Codex 작성을 실행하고, 검토 작업은 `SNSReview`의 공식 Antigravity CLI로 전달합니다. 작업과 응답의 해시 및 Windows SID가 일치할 때만 결과를 받습니다. API 키 대체 호출은 없습니다.
+
+암호는 설치 창에 직접 입력합니다. 검토 예약 작업은 SNSReview의 로그인 세션에서 실행하며 계정 암호를 예약 작업에 보관하지 않습니다. 두 Windows 사용자 세션을 로그인 상태로 유지해야 합니다. 최초 Google 로그인은 사용자별로 직접 완료해야 합니다. 다른 사용자로 실행한 CLI의 프로필 초기화와 구독 호출은 실제 PC에서 별도 확인이 필요합니다.
+
+공유 코드 기본 위치는 `C:\Users\Public\Documents\SNSCowork`입니다. 조정 사용자가 코드와 대기열을 관리하고, 검토 사용자는 검토 수신 폴더에 결과를 쓸 수 있습니다. 새 작업 화면 기본 포트는 8766입니다. 설치 도중 실패하면 같은 설치를 검토한 뒤 `scripts/setup-one-pc.ps1 -UseExistingReviewer -Resume`으로 이어갈 수 있습니다.
+
+## 다른 PC로 작업 이동
+
+각 PC에서 GitHub 코드를 준비하고 해당 PC의 구독 로그인을 완료합니다. 새 Windows 사용자에서 공유 폴더의 connect-google.cmd를 열어 Google 구독을 연결합니다. 다음 명령은 그 PC의 저장소 폴더에서 실행합니다.
+
+1. 원래 PC에서 `node scripts/sns-portable.mjs export 작업.sns-workspace.json`을 실행합니다. 실행 중인 작업이 있으면 완료 후 이동합니다. 내보내기에 성공하면 원래 PC의 대기열 실행이 인계 대기로 바뀝니다.
+2. 생성된 파일을 이동할 PC에 전달합니다. 원고·검토 결과가 포함되므로 사용자가 정한 저장 위치를 사용하세요. 자동 외부 업로드는 수행하지 않습니다.
+3. 새 PC에서 `node scripts/sns-portable.mjs import 작업.sns-workspace.json`을 실행하면 원문 스냅샷과 진행 단계에서 이어갈 수 있습니다.
+4. 돌아올 때도 새 PC에서 내보내고 원래 PC에서 가져옵니다. 한 인계 파일은 선택한 한 PC에서만 가져오세요.
+
+이동 파일에는 원문, 결과, 검토·오류 기록과 매뉴얼 스냅샷만 포함됩니다. 계정 암호, OAuth 저장소, API 키, 기기별 실행 경로와 OTP 승인 정보는 제외합니다. 가져오기 전에 파일 경로·해시·작업 상태를 검사하고, 수신 PC에 진행 중인 다른 작업 공간이 있으면 덮어쓰기를 막습니다. 교체 전 대기열은 같은 로컬 폴더의 `.queue-backup-*`에 보관합니다.
+
+`backup`은 실행을 멈추지 않는 별도 백업이며, `cancel`은 다른 PC의 실행을 중지한 뒤 원래 PC의 인계를 취소할 때 사용합니다. 여러 수신 PC 간의 전역 실행 잠금은 없으므로 같은 인계 파일을 여러 PC에서 동시에 실행하지 마세요.
