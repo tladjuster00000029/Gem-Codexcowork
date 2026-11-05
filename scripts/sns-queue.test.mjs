@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { enqueue, runQueue, listJobs, isNight, estimate, retryJob } from './sns-queue.mjs';
 import { validatePost } from './sns-validator.mjs';
-import { subscriptionEnv } from './subscription-cli.mjs';
+import { subscriptionEnv, parseGoogleResponse } from './subscription-cli.mjs';
 
 const template = JSON.parse(readFileSync(new URL('../playbooks/sns-writing/files/output-schema.json', import.meta.url), 'utf8').replace(/^\uFEFF/, ''));
 function fixture() {
@@ -38,6 +38,12 @@ test('rejects renderer-incompatible shapes and unresolved publication links', ()
 test('API auth and custom endpoints are removed', () => {
   assert.deepEqual(subscriptionEnv({ PATH: 'ok', GEMINI_API_KEY: 'secret', OPENAI_API_KEY: 'secret', GOOGLE_GENAI_USE_VERTEXAI: 'true', OPENAI_BASE_URL: 'bad' }), { PATH: 'ok' });
 });
+test('Google envelope must reach a successful terminal state', () => {
+  assert.equal(parseGoogleResponse('{"status":"SUCCESS","response":"OK"}'), 'OK');
+  for (const status of ['ERROR', 'WAITING', 'RUNNING', 'CANCELED']) {
+    assert.throws(() => parseGoogleResponse(JSON.stringify({ status, response: 'partial' })));
+  }
+});
 test('completes three stages, preserves outputs locally and never auto-publishes', t => {
   const { store, source } = setup(t);
   const job = enqueue(store, source);
@@ -66,6 +72,15 @@ test('quota pause resumes from completed planning stage', t => {
     return stage === 'draft' ? JSON.stringify(fixture()) : JSON.stringify({ approved: true, findings: [], evidence: '확인' });
   } });
   assert.deepEqual(stages, ['draft', 'review']);
+});
+test('new jobs can be registered while another job is running', t => {
+  const { store, source } = setup(t);
+  enqueue(store, source);
+  runQueue(store, { call: stage => {
+    if (stage === 'plan') { enqueue(store, source); return '계획'; }
+    return stage === 'draft' ? JSON.stringify(fixture()) : JSON.stringify({ approved: true, findings: [], evidence: '확인' });
+  } });
+  assert.deepEqual(listJobs(store).map(job => job.status), ['awaiting_user_approval', 'queued']);
 });
 test('three failed checks stop before reviewer and night job waits', t => {
   const { store, source } = setup(t, '가'.repeat(7000));

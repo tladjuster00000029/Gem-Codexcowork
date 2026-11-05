@@ -1,11 +1,11 @@
 # Gemini 두 계정 + Codex SNS 업무 시스템
 
-GitHub의 업무별 매뉴얼을 기준으로 Gemini A가 기획하고, ChatGPT 구독으로 로그인한 Codex CLI가 SNS 5종 원고를 작성하며, Gemini B가 검토합니다. 최종 결과는 사용자 승인 대기 상태로 PC에 저장됩니다.
+GitHub의 업무별 매뉴얼을 기준으로 Google Gemini 모델이 기획하고, ChatGPT 구독으로 로그인한 Codex CLI가 SNS 5종 원고를 작성하며, Google 모델이 검토합니다. Google 연결은 공식 후속 도구 Antigravity CLI를 사용합니다. 최종 결과는 사용자 승인 대기 상태로 PC에 저장됩니다.
 
 ## 시작
 
-1. Gemini 공식 CLI를 로컬 `.local-tools`에 설치합니다. 현재 PC에는 0.66.0이 설치되어 있습니다. 다른 PC에서는 `pnpm --dir .local-tools add @google/gemini-cli`를 실행하기 전에 폴더를 만드세요.
-2. `scripts/login-gemini.ps1 -Account a`, `scripts/login-gemini.ps1 -Account b`를 각각 실행하고 서로 다른 구독 Google 계정으로 로그인합니다. 로그인 후 `/quit`으로 종료합니다.
+1. 공식 Antigravity CLI를 설치합니다. 현재 PC의 `.local-tools/agy/agy.exe`는 Google 공식 매니페스트 SHA512 검증을 통과한 1.5.1입니다. 설치 안내는 https://antigravity.google/docs/getting-started?tab=cli 입니다.
+2. `scripts/login-gemini.ps1 -Account shared`로 공식 Google 구독 로그인을 진행합니다. 개인 계정의 구형 Gemini CLI 지원은 2026-06-18 종료됐습니다. Antigravity는 공통 OS 인증 저장소를 사용합니다. 계정 운영 방식을 정한 뒤 `.runtime/config.json`의 `googleMode`를 설정합니다. 단일 계정 기획·검토는 `single`이며 사용자 선택 전에는 실행을 차단합니다. 두 계정 독립 실행은 별도 Windows 환경 설계가 필요합니다.
 3. Codex CLI에서 ChatGPT로 로그인합니다. API 키 로그인은 사용하지 않습니다.
 4. `open-sns.cmd`를 열어 도서 원고를 등록하고 결과를 확인합니다.
 5. `scripts/register-sns-task.ps1`을 실행하면 로그인된 이 PC에서 15분마다 대기열을 확인합니다. PC 전원이 켜져 있어야 합니다.
@@ -35,7 +35,7 @@ PC의 UTF-8 텍스트는 `node scripts/sns-queue.mjs add 원고.txt`로 등록�
 
 기존 API 키 기반 GitHub Actions와 `scripts/cowork.mjs` 실행 경로는 구독료 내 운영 정책에 맞춰 비활성화했습니다. GitHub에는 코드·매뉴얼·가상 테스트만 반영하며 실제 미승인 원고는 공개하지 않습니다.
 
-공식 인증 문서 [Codex](https://learn.chatgpt.com/docs/auth?surface=cli), [Gemini CLI](https://geminicli.com/docs/get-started/authentication/).
+공식 인증 문서 [Codex](https://learn.chatgpt.com/docs/auth?surface=cli), [Google 종료 공지](https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals), [Antigravity 인증](https://antigravity.google/docs/install/).
 
 # 지침 적용 우선순위
 

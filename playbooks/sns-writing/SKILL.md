@@ -78,4 +78,3 @@
 - files/output-schema.json의 응답 구조로 5종 결과를 작성한다. note는 문자열이다.
 - scripts/sns-validator.mjs로 JSON 구조와 글자 수를 검사한다.
 - 카드뉴스 색상 순서는 burgundy → deep_navy → forest_green으로 적용하고 기존 생성기의 색상 자동 변경에 의존하지 않는다.
-
