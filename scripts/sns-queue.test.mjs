@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { enqueue, runQueue, listJobs, isNight, estimate, retryJob } from './sns-queue.mjs';
 import { validatePost } from './sns-validator.mjs';
-import { subscriptionEnv, parseGoogleResponse, invoke } from './subscription-cli.mjs';
+import { subscriptionEnv, parseGoogleResponse, invoke, invokeGoogleSubscription } from './subscription-cli.mjs';
 
 const template = JSON.parse(readFileSync(new URL('../playbooks/sns-writing/files/output-schema.json', import.meta.url), 'utf8').replace(/^\uFEFF/, ''));
 function fixture() {
@@ -47,6 +47,10 @@ test('Google envelope must reach a successful terminal state', () => {
 test('CLI sign-in errors are reported without exposing raw diagnostics', () => {
   assert.throws(() => invoke(process.execPath, ['-e', 'console.error("Authentication required. private detail"); process.exit(1)']),
     error => /구독 로그인/.test(error.message) && !error.message.includes('private detail'));
+});
+test('model calls wait until the login flow has finished', t => {
+  const { source } = setup(t);
+  assert.throws(() => invokeGoogleSubscription('test', { executable: 'missing', authMarker: source }), /로그인 연결이 진행 중/);
 });
 test('completes three stages, preserves outputs locally and never auto-publishes', t => {
   const { store, source } = setup(t);

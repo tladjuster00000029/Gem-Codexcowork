@@ -81,7 +81,7 @@ async function main() {
     mkdirSync(resolve(inbox), { recursive: true });
     save(join(resolve(inbox), 'health.json'), { windowsSid: sid, time: new Date().toISOString() });
     console.log(`검토 완료 ${processReviews(resolve(inbox), { sid, call: (prompt, folder, timeoutMs) => invokeGoogleSubscription(prompt, {
-      executable: resolve(executable), workDir: folder, timeoutMs,
+      executable: resolve(executable), workDir: folder, timeoutMs, authMarker: join(resolve(inbox), `auth-${sid}.json`),
     }) })}개`);
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

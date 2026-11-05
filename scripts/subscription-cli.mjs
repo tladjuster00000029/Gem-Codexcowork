@@ -38,7 +38,8 @@ export function parseGoogleResponse(raw) {
   return result.response;
 }
 
-export function invokeGoogleSubscription(prompt, { executable, workDir, timeoutMs = 15 * 60 * 1000 } = {}) {
+export function invokeGoogleSubscription(prompt, { executable, workDir, timeoutMs = 15 * 60 * 1000, authMarker } = {}) {
+  if (authMarker && existsSync(authMarker)) throw new Error('Google 로그인 연결이 진행 중입니다. 연결 완료 후 작업을 재시도하세요.');
   if (!existsSync(executable)) throw new Error('Google 공식 Antigravity CLI 설치가 필요합니다.');
   const settings = { modelProvider: '', agentMode: 'plan', toolPermission: 'request-review',
     permissions: { deny: ['command(*)', 'write_file(*)', 'mcp(*)'] } };
@@ -63,5 +64,6 @@ export function callSubscription(stage, prompt, { root, workDir, codex = 'codex'
   if (!['single', 'windows-users'].includes(googleMode)) throw new Error('Google 구독 실행 방식 설정 대기. Antigravity 로그인과 계정 운영 방식을 먼저 설정하세요.');
   if (googleMode === 'windows-users' && stage === 'review') return requestReview(prompt, { inbox: reviewInbox, reviewerSid });
   const executable = googleExecutable || join(root, '.local-tools', 'agy', 'agy.exe');
-  return invokeGoogleSubscription(prompt, { executable, workDir });
+  return invokeGoogleSubscription(prompt, { executable, workDir,
+    authMarker: reviewInbox && coordinatorSid ? join(reviewInbox, `auth-${coordinatorSid}.json`) : undefined });
 }
