@@ -60,7 +60,12 @@ export function processReviews(inbox, { sid = windowsSid(), call } = {}) {
           !Number.isFinite(request.deadline) || request.deadline <= Date.now()) continue;
       renameSync(path, join(folder, 'working.json'));
       const result = { id: request.id, promptHash: request.promptHash, windowsSid: sid, success: false };
-      try { result.response = call(request.prompt, folder, Math.min(15 * 60 * 1000, request.deadline - Date.now())); result.success = true; }
+      try {
+        const remaining = request.deadline - Date.now() - 5000;
+        if (remaining <= 0) throw new Error('검토 결과 저장을 위한 시간이 부족합니다. 새 요청으로 재시도하세요.');
+        result.response = call(request.prompt, folder, Math.min(15 * 60 * 1000, remaining));
+        result.success = true;
+      }
       catch (error) { result.error = error.message; }
       save(join(folder, 'result.json'), result);
       completed += 1;

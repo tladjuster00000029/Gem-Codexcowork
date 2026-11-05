@@ -47,3 +47,14 @@ test('provider errors pause the coordinator without a different account fallback
     wait: () => processReviews(inbox, { sid: reviewer, call: () => { throw new Error('구독 한도'); } }),
   }), /구독 한도/);
 });
+test('reviewer leaves time to save the result before the parent deadline', t => {
+  const inbox = setup(t);
+  const response = requestReview('가상 입력', {
+    inbox, reviewerSid: reviewer, coordinatorSid: planner, timeoutMs: 10000,
+    wait: () => processReviews(inbox, { sid: reviewer, call: (prompt, folder, budget) => {
+      assert.ok(budget > 0 && budget <= 5000);
+      return '검토 완료';
+    } }),
+  });
+  assert.equal(response, '검토 완료');
+});
