@@ -7,7 +7,7 @@ import { defaultStore } from './sns-queue.mjs';
 const sha = value => createHash('sha256').update(value).digest('hex');
 const jobFiles = new Set(['source.txt', 'job.json', 'plan.txt', 'bundle.json', 'validation.json',
   'review.json', 'current_post.json', 'brunch.md', 'naver.md', 'before-fix.json', 'after-fix.json',
-  'notes.md', 'manual-snapshot.md', 'schema-snapshot.json', 'notices-snapshot.md']);
+  'before-b.json', 'after-b-validation.json', 'editorial-snapshot.md', 'author-style-snapshot.md', 'notes.md', 'manual-snapshot.md', 'schema-snapshot.json', 'notices-snapshot.md']);
 const topFiles = new Set(['theme.json', 'notifications.jsonl']);
 const jobId = /^[a-f0-9-]{36}$/;
 const read = file => readFileSync(file, 'utf8');

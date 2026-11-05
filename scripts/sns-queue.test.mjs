@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { enqueue, runQueue, listJobs, isNight, estimate, retryJob } from './sns-queue.mjs';
+import { validateBundle, instagramFooter, enqueue, runQueue, listJobs, isNight, estimate, retryJob } from './sns-queue.mjs';
 import { validatePost } from './sns-validator.mjs';
 import { subscriptionEnv, parseGoogleResponse, invoke, invokeGoogleSubscription } from './subscription-cli.mjs';
 
 const template = JSON.parse(readFileSync(new URL('../playbooks/sns-writing/files/output-schema.json', import.meta.url), 'utf8').replace(/^\uFEFF/, ''));
 function fixture() {
   const bundle = structuredClone(template);
-  bundle.post.instagram.caption = '안내 ' + Array.from({ length: 11 }, (_, i) => `#태그${i}`).join(' ');
+  bundle.post.instagram.caption = instagramFooter + '\n안내 ' + Array.from({ length: 11 }, (_, i) => `#태그${i}`).join(' ');
   bundle.post.threads.reply_text = '안내 #가 #나 #다 #라 #마';
   return bundle;
 }
@@ -60,7 +60,7 @@ test('completes three stages, preserves outputs locally and never auto-publishes
     stages.push(stage);
     if (stage === 'plan') return '계획';
     if (stage === 'draft') return JSON.stringify(fixture());
-    return JSON.stringify({ approved: true, findings: [], evidence: '가상 검토' });
+    return JSON.stringify({ approved: true, findings: [], revised_bundle: fixture(), changes: [], evidence: '가상 검토' });
   } });
   assert.deepEqual(stages, ['plan', 'draft', 'review']);
   assert.equal(listJobs(store)[0].status, 'awaiting_user_approval');
@@ -77,7 +77,7 @@ test('quota pause resumes from completed planning stage', t => {
   const stages = [];
   runQueue(store, { call: stage => {
     stages.push(stage);
-    return stage === 'draft' ? JSON.stringify(fixture()) : JSON.stringify({ approved: true, findings: [], evidence: '확인' });
+    return stage === 'draft' ? JSON.stringify(fixture()) : JSON.stringify({ approved: true, findings: [], revised_bundle: fixture(), changes: [], evidence: '확인' });
   } });
   assert.deepEqual(stages, ['draft', 'review']);
 });
@@ -86,7 +86,7 @@ test('new jobs can be registered while another job is running', t => {
   enqueue(store, source);
   runQueue(store, { call: stage => {
     if (stage === 'plan') { enqueue(store, source); return '계획'; }
-    return stage === 'draft' ? JSON.stringify(fixture()) : JSON.stringify({ approved: true, findings: [], evidence: '확인' });
+    return stage === 'draft' ? JSON.stringify(fixture()) : JSON.stringify({ approved: true, findings: [], revised_bundle: fixture(), changes: [], evidence: '확인' });
   } });
   assert.deepEqual(listJobs(store).map(job => job.status), ['awaiting_user_approval', 'queued']);
 });
@@ -101,4 +101,23 @@ test('three failed checks stop before reviewer and night job waits', t => {
     return JSON.stringify({ post: {} });
   } });
   assert.equal(listJobs(store)[0].status, 'needs_revision');
+});
+
+test('fixed Instagram footer must survive review unchanged', () => {
+ const b = fixture(); b.post.instagram.caption = b.post.instagram.caption.replace('첫 연재', '이번');
+ // Exercise the actual validation gate before any publishing approval.
+ assert.ok(validateBundle(b).some(x => x.includes('고정 안내')));
+});
+
+test('B revised bundle replaces Codex output and keeps before-and-after evidence', t => {
+ const {store,source}=setup(t); const job=enqueue(store,source); const final=fixture();final.brunch='B가 보완한 최종 본문';
+ runQueue(store,{call:stage => stage==='plan' ? JSON.stringify(fixture()) : stage==='draft' ? JSON.stringify(fixture()) : JSON.stringify({approved:true,findings:[],evidence:'수정',changes:['본문 보완'],revised_bundle:final})});
+ assert.equal(listJobs(store)[0].status,'awaiting_user_approval');
+ assert.equal(readFileSync(join(store,job.id,'brunch.md'),'utf8'),final.brunch);
+ assert.notEqual(JSON.parse(readFileSync(join(store,job.id,'before-b.json'))).brunch,final.brunch);
+});
+test('B cannot approve a revision that changes the fixed Instagram footer', t => {
+ const {store,source}=setup(t);enqueue(store,source);const final=fixture();final.post.instagram.caption=final.post.instagram.caption.replace('첫 연재','이번');
+ runQueue(store,{call:stage=>stage==='plan'?'가상초안':stage==='draft'?JSON.stringify(fixture()):JSON.stringify({approved:true,findings:[],evidence:'검토',changes:['footer'],revised_bundle:final})});
+ assert.equal(listJobs(store)[0].status,'paused');assert.match(listJobs(store)[0].error,/B 수정본 재검증 실패/);
 });
