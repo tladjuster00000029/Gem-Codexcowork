@@ -19,6 +19,11 @@ export function invoke(executable, args, { cwd, env, input, includeStderr = fals
   });
   if (result.error) throw result.error;
   if (result.status !== 0) {
+    const diagnostics = `${result.stderr || ''}\n${result.stdout || ''}`;
+    if (/Please sign in|not signed in|not logged in|authentication required|unauthenticated|login required/i.test(diagnostics)) {
+      throw new Error('해당 Windows 사용자의 공식 CLI 구독 로그인을 완료하세요.');
+    }
+    if (/quota|rate.limit|RESOURCE_EXHAUSTED/i.test(diagnostics)) throw new Error('구독 사용 한도에 도달했습니다. 초기화 후 재시도하세요.');
     // Raw CLI diagnostics can contain source text or credentials. Keep them local to the CLI.
     throw new Error(`CLI 실행 실패 (${result.status}). 로그인, 구독 한도, 연결 상태를 확인하세요.`);
   }
